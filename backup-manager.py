@@ -156,7 +156,7 @@ def make_restore_script(backup, expire=86400):
 
     mysortedfilelist = []
     for key in backup['keys']:
-        output.append('wget -O $1/.restorescript-scratch/%s "%s"\n' % (key.name, key.generate_url(expires_in=expire)))
+        output.append('wget -O .restorescript-scratch/%s "%s" --no-check-certificate\n' % (key.name, key.generate_url(expires_in=expire)))
         mysortedfilelist.append('.restorescript-scratch/' + key.name)
     mysortedfilelist.sort()
 

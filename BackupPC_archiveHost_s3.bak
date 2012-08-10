@@ -1,5 +1,5 @@
 #!/usr/bin/python -W ignore::DeprecationWarning
-# BackupPC script to archive a host's files to Amazon S3.
+# A BackupPC script to archive a host's files to Amazon S3.
 #
 # Point $Conf{ArchiveClientCmd} at me.
 # Requires python-boto
@@ -51,7 +51,6 @@ import logging.handlers
 
 import secrets
 
-
 logger = logging.getLogger(__name__)
 
 sysloghandler = logging.handlers.SysLogHandler('/dev/log',
@@ -66,7 +65,6 @@ consolehandler.setFormatter(consoleformatter)
 logger.addHandler(consolehandler)
 
 logger.setLevel(logging.DEBUG)
-
 
 class VerifyError(Exception):
     pass
@@ -156,14 +154,11 @@ def encryption_worker(in_q, out_q, unlink_q):
     start_time = time.time()
     counter = 0
     for filename, gpgkey, comppath in iter(in_q.get, 'STOP'):
-        logger.debug("encryption_worker: got from gpg_queue file -> '%s', gpgkey -> '%s', comppath -> '%s'" % (filename, gpgkey, comppath))
         counter += 1
         cryptstart_time = time.time()
         logger.info("encryption_worker: encrypting %s", filename)
         result = encrypt_file(filename, gpgkey, comppath)
-        logger.debug("encryption_worker: put to send_queue result -> '%s" % result)
         out_q.put(result)
-        logger.debug("encryption_worker: put to unlink_queue filename -> '%s" % filename)
         unlink_q.put(filename)
         logger.debug("encryption_worker: encrypted %s in %i seconds", filename, time.time()-cryptstart_time)
     logger.debug("encryption_worker: queue is empty, terminating after %i items in %i seconds", counter, time.time()-start_time)
@@ -174,7 +169,6 @@ def sending_worker(in_q, out_q, accesskey, sharedkey, host):
     start_time = time.time()
     counter = 0
     for filename in iter(in_q.get, 'STOP'):
-        logger.debug("sending_worker: got from pgp_queue filename -> '%s" % filename)
         sending_start = time.time()
         counter += 1
         retry_count = 0
@@ -203,8 +197,6 @@ def sending_worker(in_q, out_q, accesskey, sharedkey, host):
             sending_seconds = time.time() - sending_start
             bytespersecond = size / sending_seconds
             logger.debug("sending_worker: sent %s in %i seconds at %i bytes/second.", filename, sending_seconds, bytespersecond)
-
-            logger.debug("sending_worker: put to unlink_queue filename -> '%s" % filename)
             out_q.put(filename)
 
     logger.debug("sending_worker: queue is empty, terminating after %i items in %i seconds", counter, time.time() - start_time)
@@ -226,18 +218,6 @@ def unlink_worker(in_q):
 
 if __name__ == '__main__':
     # Read in arguments, verify that they match the BackupPC standard exactly
-    # /usr/share/backuppc/bin/BackupPC_archiveHost_s3
-    # 1. /usr/share/backuppc/bin/BackupPC_tarCreate
-    # 2. /usr/bin/split
-    # 3. /usr/bin/par2
-    # 4. sandbox.zojax.com
-    # 5. 42
-    # 6. /bin/bzip2
-    # 7. .bz2
-    # 8. 500000000
-    # 9. /mnt/backup/archives3
-    # 10. 0
-    # 11. *
     if len(sys.argv) != 12:
         sys.stderr.write("Usage: %s tarCreatePath splitPath parPath host bkupNum compPath fileExt splitSize outLoc parFile share\n" % sys.argv[0])
         sys.exit(1)
@@ -270,7 +250,7 @@ if __name__ == '__main__':
         'gpg_queue': gpg_queue,
         'send_queue': send_queue,
         'unlink_queue': unlink_queue,
-        }
+    }
 
     # Is there already evidence of this having been done before?
     if glob.glob('%s/%s.*.tar.*' % (outLoc, host)):
@@ -349,7 +329,6 @@ if __name__ == '__main__':
         if secrets.gpgsymmetrickey and not i.endswith('.gpg'):
             # A tar file, unencrypted, needs encrypted.
             logger.debug("main: adding %s to gpg_queue", i)
-            logger.debug("main: adding data to gpg_queue: file -> '%s', gpgkey -> '%s', comppath -> '%s'" % (i, secrets.gpgsymmetrickey, compPath))
             gpg_queue.put([i, secrets.gpgsymmetrickey, compPath])
         else:
             # either encryption is off, or the file is already encrypted
@@ -364,7 +343,7 @@ if __name__ == '__main__':
 
     procs = []
 
-    for i in range(1):#process_count):
+    for i in range(process_count):
         p = Process(name="encryption_worker_%i" % i, target=encryption_worker, args=(gpg_queue, send_queue, unlink_queue))
         p.start()
         procs.append(p)
@@ -382,7 +361,7 @@ if __name__ == '__main__':
 
     # Put STOP command(s) at the end of the GPG queue.
     gpg_queue_closed = True
-    for i in range(1):#process_count):
+    for i in range(process_count):
         gpg_queue.put('STOP')
 
     for i in procs:
@@ -418,15 +397,9 @@ if __name__ == '__main__':
     for qname, q in queues.items():
         time.sleep(5)  # settle
         if not q.empty():
-            content = []
-            while not q.empty():
-                qcontent.append(q.get())
             logger.critical("main: queue %s not empty!", qname)
-            logger.critical("main: queue %s content: %s" % (qname, qcontent))
             raise Exception("queue not empty: %s" % qname)
         else:
             logger.debug("main: queue %s is empty", qname)
 
     logger.info("main: completed run after %i seconds", (time.time() - beginning))
-
-    # $Installdir/bin/BackupPC_archiveHost_s3 $tarCreatePath $splitpath $parpath $host $backupnumber $compression $compext $splitsize $archiveloc $parfile *
